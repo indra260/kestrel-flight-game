@@ -69,7 +69,12 @@ function drawCompass(ctx, headingDeg) {
   ctx.restore();
   ctx.fillStyle = ACCENT;
   ctx.beginPath(); ctx.moveTo(cx - 6, 60); ctx.lineTo(cx + 6, 60); ctx.lineTo(cx, 68); ctx.closePath(); ctx.fill();
+  // The readout floats over open sky: give it a shadow so a bright cloud
+  // behind it cannot wash the digits out.
+  ctx.save();
+  ctx.shadowColor = 'rgba(6,10,18,0.75)'; ctx.shadowBlur = 5;
   label(ctx, `${String(Math.round(headingDeg)).padStart(3, '0')}°`, cx, 84, 13, INK, 'center');
+  ctx.restore();
 }
 
 function drawHorizon(ctx, flight) {
@@ -139,7 +144,10 @@ function drawObjectiveArrow(ctx, view) {
     ctx.translate(p.x, p.y - 26);
     ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(-7, -4); ctx.lineTo(7, -4); ctx.closePath(); ctx.fill();
     ctx.restore();
+    ctx.save();
+    ctx.shadowColor = 'rgba(6,10,18,0.8)'; ctx.shadowBlur = 5;
     label(ctx, distText, p.x, p.y - 36, 12, ACCENT, 'center');
+    ctx.restore();
     return;
   }
   // Off-screen: a chevron on the lower centre line pointing the way to turn.

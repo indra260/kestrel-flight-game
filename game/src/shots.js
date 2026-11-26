@@ -20,18 +20,26 @@ function steerToward(state, target, cruiseSpeed) {
 }
 
 const SCENES = {
-  // Rolling down Runway 36 at rotation speed, gates waiting up the valley.
+  // Climbing out over the valley at gate height, the first gate ahead.
   takeoff: {
     kind: MISSION_RINGS,
     setup(flight) { /* the Ring Run start pose is the runway itself */ },
     controls(state) {
+      // Rotate at 52, climb briskly to gate height, then ease off: holding
+      // full pitch to the freeze point would park the Kestrel hundreds of
+      // metres above the gate it is meant to be chasing.
+      let pitch = 0;
+      if (state.speed >= 52) pitch = state.pos.y < RUNWAY.altitude + 92 ? 0.45 : 0.06;
       return {
         bank: 0,
-        pitch: state.speed < 52 ? 0 : 0.62,
+        pitch,
         throttleDelta: 1,
       };
     },
-    ready(state) { return state.airborne && state.pos.y > RUNWAY.altitude + 30; },
+    // Freeze once the Kestrel is established in the climb AND gate 1 has
+    // grown from a speck behind the fin into a ring the cover can sell:
+    // at z 2250 it sits ~650 m ahead at eye level, the valley below.
+    ready(state) { return state.airborne && state.pos.y > RUNWAY.altitude + 60 && state.pos.z > 2250; },
   },
   // Through the first gate, lining up the second over the river.
   rings: {

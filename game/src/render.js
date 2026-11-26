@@ -41,8 +41,40 @@ export function createRenderer(canvas) {
       z: -600 + cloudRandom() * 13800,
       s: 130 + cloudRandom() * 210,
       a: 0.35 + cloudRandom() * 0.35,
+      sprite: i % 3,
     });
   }
+
+  // Cloud sprites, painted once: overlapping radial-gradient puffs with
+  // soft edges and a shaded belly. Drawn flat ellipses read as hard blobs
+  // and leave sky-coloured wedges where they overlap; a gradient sprite
+  // melts into the sky instead, and drawImage is cheaper than the paths.
+  const cloudSprites = [11, 47, 83].map((seed) => {
+    const sprite = document.createElement('canvas');
+    sprite.width = 256; sprite.height = 128;
+    const g = sprite.getContext('2d');
+    const rnd = createRandom(seed);
+    for (let i = 0; i < 10; i += 1) {
+      const px = 38 + rnd() * 180;
+      const py = 50 + rnd() * 26;
+      const r = 20 + rnd() * 30;
+      const grad = g.createRadialGradient(px, py - r * 0.3, r * 0.08, px, py, r);
+      grad.addColorStop(0, 'rgba(255,255,255,0.5)');
+      grad.addColorStop(0.65, 'rgba(250,252,255,0.26)');
+      grad.addColorStop(1, 'rgba(248,250,255,0)');
+      g.fillStyle = grad;
+      g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.fill();
+    }
+    // Belly shading, kept inside the puffs by source-atop.
+    g.globalCompositeOperation = 'source-atop';
+    const belly = g.createLinearGradient(0, 58, 0, 128);
+    belly.addColorStop(0, 'rgba(138,158,188,0)');
+    belly.addColorStop(1, 'rgba(138,158,188,0.22)');
+    g.fillStyle = belly;
+    g.fillRect(0, 0, 256, 128);
+    g.globalCompositeOperation = 'source-over';
+    return sprite;
+  });
 
   function spawnParticle(p) {
     if (particles.length < 420) particles.push(p);
@@ -161,7 +193,15 @@ export function createRenderer(canvas) {
         const surface = surfaceAt(wx, wz, PALETTE);
         const hNear = (vertexH[a] + vertexH[b]) / 2;
         const hFar = (vertexH[c] + vertexH[dIdx]) / 2;
-        let shadeF = clamp(0.9 + (hNear - hFar) * 0.012, 0.74, 1.1);
+        // Relief from two slopes: the view-axis tilt the mesh already knows,
+        // plus a sun term from the world-space gradient, so a hillside facing
+        // the sun (azimuth -0.65, as drawSky places it) stays lit whichever
+        // way the aircraft is heading, instead of banding with the view.
+        const gradStep = 16;
+        const slopeX = (terrainHeight(wx + gradStep, wz) - terrainHeight(wx - gradStep, wz)) / (2 * gradStep);
+        const slopeZ = (terrainHeight(wx, wz + gradStep) - terrainHeight(wx, wz - gradStep)) / (2 * gradStep);
+        const sunFacing = -(slopeX * -0.6 + slopeZ * 0.8);
+        let shadeF = clamp(0.92 + (hNear - hFar) * 0.006 + sunFacing * 0.34, 0.72, 1.13);
         if (surface.kind === 'sea' || surface.kind === 'river') {
           shadeF += Math.sin(time * 1.6 + wz * 0.02 + wx * 0.013) * 0.045;
         }
@@ -296,16 +336,12 @@ export function createRenderer(canvas) {
     for (const cloud of clouds) {
       const p = camera.project(cloud);
       if (!p || p.depth > 4300) continue;
-      const rx = cloud.s * p.scale * 1.9;
-      const ry = rx * 0.3;
-      const alpha = cloud.a * (1 - camera.fogFactor(p.depth) * 0.65);
-      ctx2d.fillStyle = `rgba(255,255,255,${alpha})`;
-      ctx2d.beginPath();
-      ctx2d.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
-      ctx2d.ellipse(p.x - rx * 0.45, p.y + ry * 0.3, rx * 0.55, ry * 0.75, 0, 0, Math.PI * 2);
-      ctx2d.ellipse(p.x + rx * 0.48, p.y + ry * 0.28, rx * 0.6, ry * 0.8, 0, 0, Math.PI * 2);
-      ctx2d.ellipse(p.x + rx * 0.05, p.y - ry * 0.4, rx * 0.5, ry * 0.72, 0, 0, Math.PI * 2);
-      ctx2d.fill();
+      const w = cloud.s * p.scale * 4.1;
+      const h = w * 0.5;
+      ctx2d.save();
+      ctx2d.globalAlpha = cloud.a * (1 - camera.fogFactor(p.depth) * 0.65);
+      ctx2d.drawImage(cloudSprites[cloud.sprite], p.x - w / 2, p.y - h / 2, w, h);
+      ctx2d.restore();
     }
   }
 
@@ -439,7 +475,7 @@ export function createRenderer(canvas) {
     const rx = Math.abs(right.x - centre.x);
     const ry = Math.abs(top.y - centre.y);
     let color = [170, 220, 235];
-    let alpha = 0.55;
+    let alpha = 0.62;
     if (ring.state === 'next') { color = [255, 180, 84]; alpha = 0.8 + 0.2 * Math.sin(time * 5); }
     else if (ring.state === 'passed') { color = [126, 231, 135]; alpha = 0.85; }
     else if (ring.state === 'missed') { color = [200, 90, 80]; alpha = 0.45; }
@@ -447,6 +483,11 @@ export function createRenderer(canvas) {
     alpha *= clamp((centre.depth - 16) / 34, 0, 1);
     if (alpha <= 0.01) return;
     color = mixColor(color, PALETTE.fog, camera.fogFactor(centre.depth));
+    // A soft dark under-stroke first, so the pale ring still reads where it
+    // crosses bright sky, cloud or sunlit grass.
+    ctx2d.strokeStyle = `rgba(18, 28, 44, ${alpha * 0.32})`;
+    ctx2d.lineWidth = clamp(0.85 * centre.scale, 2, 9) * 2.1;
+    ctx2d.beginPath(); ctx2d.ellipse(centre.x, centre.y, rx, ry, 0, 0, Math.PI * 2); ctx2d.stroke();
     ctx2d.strokeStyle = rgb(color, alpha);
     ctx2d.lineWidth = clamp(0.85 * centre.scale, 2, 9);
     ctx2d.beginPath(); ctx2d.ellipse(centre.x, centre.y, rx, ry, 0, 0, Math.PI * 2); ctx2d.stroke();
