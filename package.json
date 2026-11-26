@@ -1,0 +1,1 @@
+{"description":"Sky Courier — Valley Circuit: a chase-view 3D flight game in plain static files (make.fun 'Make the best flight game' bounty entry).","name":"sky-courier-valley-circuit","private":true,"scripts":{"check":"node main.ts","dossier":"node main.ts","serve":"node serve.ts"},"type":"module","version":"1.0.0"}
