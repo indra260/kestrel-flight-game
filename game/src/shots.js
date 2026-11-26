@@ -97,7 +97,12 @@ const SCENES = {
         throttleDelta: clamp((57 - state.speed) * 0.03, -1, 1),
       };
     },
-    ready(state) { return state.pos.z > RUNWAY.zStart - 300; },
+    // Freeze on short final, ~190 m out: the threshold, PAPI lights and
+    // touchdown zone fill the middle of the frame instead of sitting
+    // small inside a wide bowl of grass, and the Kestrel is still
+    // comfortably airborne (the autopilot's glide meets the zone
+    // hundreds of metres further on).
+    ready(state) { return state.pos.z > RUNWAY.zStart - 190; },
   },
 };
 

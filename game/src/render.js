@@ -20,8 +20,8 @@ function shade(color, f) {
   return [clamp(color[0] * f, 0, 255), clamp(color[1] * f, 0, 255), clamp(color[2] * f, 0, 255)];
 }
 
-const TERRAIN_ROWS = 42;
-const TERRAIN_COLS = 26;
+const TERRAIN_ROWS = 50;
+const TERRAIN_COLS = 34;
 
 export function createRenderer(canvas) {
   const ctx2d = canvas.getContext('2d');
@@ -34,7 +34,7 @@ export function createRenderer(canvas) {
   // Far clouds hang over the valley at fixed spots, the same every visit.
   const cloudRandom = createRandom(4242);
   const clouds = [];
-  for (let i = 0; i < 44; i += 1) {
+  for (let i = 0; i < 54; i += 1) {
     clouds.push({
       x: -2800 + cloudRandom() * 5600,
       y: 400 + cloudRandom() * 280,
@@ -75,6 +75,25 @@ export function createRenderer(canvas) {
     g.globalCompositeOperation = 'source-over';
     return sprite;
   });
+
+  // The shadow a cloud throws on the valley floor, painted once: a soft
+  // dark ellipse that melts out at the edges, so a flat field under a
+  // cloud reads as ground in shade rather than a decal.
+  const cloudShadowSprite = (() => {
+    const sprite = document.createElement('canvas');
+    sprite.width = 256; sprite.height = 128;
+    const g = sprite.getContext('2d');
+    const grad = g.createRadialGradient(128, 64, 8, 128, 64, 122);
+    grad.addColorStop(0, 'rgba(16,30,22,0.55)');
+    grad.addColorStop(0.6, 'rgba(16,30,22,0.28)');
+    grad.addColorStop(1, 'rgba(16,30,22,0)');
+    g.fillStyle = grad;
+    g.save();
+    g.translate(128, 64); g.scale(1, 0.5); g.translate(-128, -64);
+    g.fillRect(0, -64, 256, 256);
+    g.restore();
+    return sprite;
+  })();
 
   function spawnParticle(p) {
     if (particles.length < 420) particles.push(p);
@@ -147,7 +166,6 @@ export function createRenderer(canvas) {
   }
   const vertexX = new Float32Array((TERRAIN_ROWS + 1) * (TERRAIN_COLS + 1));
   const vertexY = new Float32Array((TERRAIN_ROWS + 1) * (TERRAIN_COLS + 1));
-  const vertexH = new Float32Array((TERRAIN_ROWS + 1) * (TERRAIN_COLS + 1));
   const vertexOk = new Uint8Array((TERRAIN_ROWS + 1) * (TERRAIN_COLS + 1));
 
   function drawTerrain(time) {
@@ -168,7 +186,6 @@ export function createRenderer(canvas) {
         const wz = originZ + fwdZ * d + rightZ * off;
         const wy = terrainHeight(wx, wz);
         const idx = i * (TERRAIN_COLS + 1) + j;
-        vertexH[idx] = wy;
         const p = camera.project({ x: wx, y: wy, z: wz });
         if (p) { vertexX[idx] = p.x; vertexY[idx] = p.y; vertexOk[idx] = 1; }
         else vertexOk[idx] = 0;
@@ -191,17 +208,23 @@ export function createRenderer(canvas) {
         const wx = originX + fwdX * dMid + rightX * midOff;
         const wz = originZ + fwdZ * dMid + rightZ * midOff;
         const surface = surfaceAt(wx, wz, PALETTE);
-        const hNear = (vertexH[a] + vertexH[b]) / 2;
-        const hFar = (vertexH[c] + vertexH[dIdx]) / 2;
-        // Relief from two slopes: the view-axis tilt the mesh already knows,
-        // plus a sun term from the world-space gradient, so a hillside facing
-        // the sun (azimuth -0.65, as drawSky places it) stays lit whichever
-        // way the aircraft is heading, instead of banding with the view.
-        const gradStep = 16;
+        // Relief from two slopes: the view-axis tilt, plus a sun term, so a
+        // hillside facing the sun (azimuth -0.65, as drawSky places it)
+        // stays lit whichever way the aircraft is heading, instead of
+        // banding with the view. Both terms come from one world-space
+        // gradient sampled over a step matched to the quad's own footprint:
+        // a quad a hundred metres wide shaded by a 16 m sample (or by the
+        // raw height drop between its mesh rows) aliases — the sample lands
+        // on whatever ripple crosses the centre, the drop grows with the
+        // row's depth, and hillsides smear into light/dark curtains.
+        const rowDepth = rowDistances[i + 1] - rowDistances[i];
+        const colWidth = (halfSpanNear + halfSpanFar) / TERRAIN_COLS;
+        const gradStep = clamp(Math.min(rowDepth, colWidth) * 0.75, 16, 150);
         const slopeX = (terrainHeight(wx + gradStep, wz) - terrainHeight(wx - gradStep, wz)) / (2 * gradStep);
         const slopeZ = (terrainHeight(wx, wz + gradStep) - terrainHeight(wx, wz - gradStep)) / (2 * gradStep);
         const sunFacing = -(slopeX * -0.6 + slopeZ * 0.8);
-        let shadeF = clamp(0.92 + (hNear - hFar) * 0.006 + sunFacing * 0.34, 0.72, 1.13);
+        const slopeView = -(slopeX * fwdX + slopeZ * fwdZ);
+        let shadeF = clamp(0.93 + slopeView * 0.16 + sunFacing * 0.34, 0.74, 1.12);
         if (surface.kind === 'sea' || surface.kind === 'river') {
           shadeF += Math.sin(time * 1.6 + wz * 0.02 + wx * 0.013) * 0.045;
         }
@@ -215,6 +238,33 @@ export function createRenderer(canvas) {
         ctx2d.closePath();
         ctx2d.fill();
       }
+    }
+  }
+
+  // ---- Cloud shadows ---------------------------------------------------------
+  // Each cloud's shadow, thrown along the sun's light (azimuth -0.65,
+  // elevation 0.38, as drawSky places it): the ground point a cloud shades
+  // sits down-sun of its nadir by ~1.5 m east and ~2 m south per metre of
+  // height. Soft sprites at low alpha — they break up the flat patchwork
+  // and give the fields a sense of weather passing over them.
+  function drawCloudShadows() {
+    for (const cloud of clouds) {
+      let gy = 40;
+      let gx = cloud.x;
+      let gz = cloud.z;
+      for (let k = 0; k < 2; k += 1) {
+        gx = cloud.x + (cloud.y - gy) * 1.515;
+        gz = cloud.z - (cloud.y - gy) * 1.992;
+        gy = terrainHeight(gx, gz);
+      }
+      const p = camera.project({ x: gx, y: gy + 0.6, z: gz });
+      if (!p || p.depth < 60 || p.depth > 3000) continue;
+      const w = cloud.s * p.scale * 3.6;
+      const h = w * 0.5;
+      ctx2d.save();
+      ctx2d.globalAlpha = cloud.a * 0.34 * (1 - camera.fogFactor(p.depth) * 0.75);
+      ctx2d.drawImage(cloudShadowSprite, p.x - w / 2, p.y - h / 2, w, h);
+      ctx2d.restore();
     }
   }
 
@@ -523,14 +573,21 @@ export function createRenderer(canvas) {
       ctx2d.beginPath(); ctx2d.ellipse(sp.x, sp.y, 2.4 * sp.scale, 0.8 * sp.scale, 0, 0, Math.PI * 2); ctx2d.fill();
     }
     if (parcel.state === 'falling' && parcel.age > 0.35) {
-      // Parachute canopy and its lines.
+      // Parachute canopy and its lines: four shrouds fanning from the
+      // canopy's rim to the crate's top corners, and a canopy shaded from
+      // a lit crown to a deeper rim so it reads as cloth under tension,
+      // not a flat half-disc.
       ctx2d.strokeStyle = 'rgba(240,240,240,0.85)';
       ctx2d.lineWidth = Math.max(1, 0.22 * u);
       ctx2d.beginPath();
-      ctx2d.moveTo(p.x - 3.4 * u, p.y - 4.6 * u); ctx2d.lineTo(p.x, p.y);
-      ctx2d.moveTo(p.x + 3.4 * u, p.y - 4.6 * u); ctx2d.lineTo(p.x, p.y);
+      for (const [rimX, boxX] of [[-3.4, -0.9], [-1.7, -0.3], [1.7, 0.3], [3.4, 0.9]]) {
+        ctx2d.moveTo(p.x + rimX * u, p.y - 4.7 * u); ctx2d.lineTo(p.x + boxX * u, p.y - 1.0 * u);
+      }
       ctx2d.stroke();
-      ctx2d.fillStyle = rgb([255, 122, 60]);
+      const canopyGrad = ctx2d.createLinearGradient(0, p.y - 6.6 * u, 0, p.y - 4.4 * u);
+      canopyGrad.addColorStop(0, '#ffa25e');
+      canopyGrad.addColorStop(1, '#e85f1e');
+      ctx2d.fillStyle = canopyGrad;
       ctx2d.beginPath(); ctx2d.ellipse(p.x, p.y - 4.8 * u, 3.6 * u, 1.7 * u, 0, Math.PI, Math.PI * 2); ctx2d.fill();
     }
     ctx2d.save();
@@ -685,7 +742,12 @@ export function createRenderer(canvas) {
     ctx2d.beginPath(); ctx2d.ellipse(0, -42, 14.5, 10, 0, 0, Math.PI * 2); ctx2d.fill();
     ctx2d.fillStyle = 'rgba(255,255,255,0.8)';
     ctx2d.beginPath(); ctx2d.ellipse(-4.5, -45.5, 5, 3.2, -0.4, 0, Math.PI * 2); ctx2d.fill();
-    // Propeller: an edge-on shimmer disc at the far nose.
+    // Propeller: from behind, a spinning prop is a faint blurred disc the
+    // fuselage sits inside — without it the Kestrel reads as a glider in
+    // stills. A translucent disc first, then the darker edge-on band the
+    // eye catches as the blades pass the vertical.
+    ctx2d.fillStyle = 'rgba(32,38,46,0.13)';
+    ctx2d.beginPath(); ctx2d.ellipse(0, -64, 31, 13.5, 0, 0, Math.PI * 2); ctx2d.fill();
     ctx2d.fillStyle = 'rgba(32,38,46,0.4)';
     ctx2d.beginPath(); ctx2d.ellipse(0, -64 + Math.sin(flight.propPhase) * 1.6, 33, 3.4, 0, 0, Math.PI * 2); ctx2d.fill();
     ctx2d.fillStyle = '#26303a';
@@ -759,6 +821,7 @@ export function createRenderer(canvas) {
     ctx2d.translate(-VIEW.width / 2, -VIEW.height / 2);
     drawSky(flight, time);
     drawTerrain(time);
+    drawCloudShadows();
     drawRunwayMarkings();
     if (mission && mission.kind === MISSION_CARGO) drawCargoTarget(time);
     drawAircraftShadow(flight);
