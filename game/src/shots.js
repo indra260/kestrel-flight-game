@@ -129,6 +129,24 @@ export function setupShotMode({ flight, renderer, hud }) {
   renderer.draw(view, STEP);
   renderer.draw(view, STEP);
   const objective = mission.objective(flight.state);
+  // The captures show the HUD as a player sees it mid-sortie: the progress
+  // line filled in, and the event banner the last moment earned.
+  let progressText = '';
+  let shotMessage = null;
+  if (scene.kind === MISSION_RINGS) {
+    const passedCount = mission.rings.filter((r) => r.state === 'passed').length;
+    progressText = `GATES ${passedCount}/${mission.rings.length}`;
+    if (passedCount > 0) {
+      shotMessage = { text: `GATE ${passedCount} CLEAN`, color: '#7ee787', until: simTime + 2, dur: 2.2 };
+    }
+  } else if (scene.kind === MISSION_CARGO) {
+    progressText = mission.parcel.state === 'carried' ? 'PARCEL ABOARD · SPACE = DROP' : 'PARCEL FALLING…';
+    if (mission.parcel.state === 'falling') {
+      shotMessage = { text: 'PARCEL AWAY!', color: '#ffb054', until: simTime + 2, dur: 2.2 };
+    }
+  } else if (scene.kind === MISSION_LANDING) {
+    progressText = 'TOUCHDOWN ZONE COUNTS';
+  }
   hud.draw({
     screen: 'playing',
     time: simTime,
@@ -140,9 +158,9 @@ export function setupShotMode({ flight, renderer, hud }) {
     best: 0,
     bests: {},
     objectiveText: objective.label,
-    progressText: '',
+    progressText,
     target: objective,
-    message: null,
+    message: shotMessage,
     selected: 0,
     circuit: false,
     hasNext: false,

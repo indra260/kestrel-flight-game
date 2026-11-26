@@ -690,8 +690,8 @@ export function createRenderer(canvas) {
   }
 
   function drawSpeedStreaks(flight, time) {
-    if (!flight.airborne || flight.speed < 96) return;
-    const alpha = clamp((flight.speed - 96) / 60, 0, 0.4);
+    if (!flight.airborne || flight.speed < 80) return;
+    const alpha = clamp((flight.speed - 80) / 45, 0, 0.4);
     ctx2d.strokeStyle = `rgba(255,255,255,${alpha})`;
     ctx2d.lineWidth = 2;
     ctx2d.beginPath();

@@ -193,7 +193,17 @@ function handleMissionEvents(events) {
     prevPassedCount = passed.length;
     showMessage(mission.combo > 1 ? `GATE ${passed.length} — COMBO ×${mission.combo}` : `GATE ${passed.length} CLEAN`, '#7ee787', 1.5);
   }
-  if (events & M_RING_CLIPPED) { audio.thud(0.7); showMessage('CLIPPED THE GATE — HULL DAMAGE', '#ffb054', 2); }
+  if (events & M_RING_CLIPPED) {
+    audio.thud(0.7);
+    showMessage('CLIPPED THE GATE — HULL DAMAGE', '#ffb054', 2);
+    // The message is the truth: clipping a gate frame costs hull, and a
+    // Kestrel already held together by hope can come apart on it.
+    if (flight.damage(7) && screen === 'playing') {
+      renderer.burst(flight.state.pos, [255, 140, 60], 30, 22, 1.1, 5);
+      renderer.burst(flight.state.pos, [70, 70, 74], 22, 12, 1.6, 7);
+      endMission(false, 'CRASHED', 'One gate frame too many — the Kestrel came apart.');
+    }
+  }
   if (events & M_RING_MISSED) showMessage('GATE MISSED', '#ff6b5e', 1.6);
   if (events & M_PARCEL_DROPPED) { audio.drop(); showMessage('PARCEL AWAY!', '#ffb054', 1.6); }
   if (events & M_PARCEL_LANDED) {
@@ -351,7 +361,7 @@ function progressText() {
     if (mission.parcel.state === 'falling') return 'PARCEL FALLING…';
     return 'PARCEL DOWN — HEAD HOME';
   }
-  return 'LAND ON RWY 36 · TOUCHDOWN ZONE COUNTS';
+  return 'TOUCHDOWN ZONE COUNTS';
 }
 
 // Shot mode replaces the interactive loop entirely when ?shot= is present.

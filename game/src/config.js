@@ -44,8 +44,8 @@ export const AIRCRAFT = {
   maxPitchDown: -0.5,
   turnPerBank: 0.62, // heading rad/s at full bank and cruise speed
   fuelCapacity: 100,
-  fuelBurnCruise: 0.62, // tank units per second at 65% throttle
-  fuelBurnClimb: 1.15, // extra burn while climbing hard
+  fuelBurnCruise: 0.34, // tank units per second at 65% throttle
+  fuelBurnClimb: 0.65, // extra burn while climbing hard
   hull: 100,
 };
 

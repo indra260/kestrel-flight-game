@@ -174,9 +174,11 @@ function drawWarnings(ctx, flight, time) {
     ctx.restore();
     y += 30;
   }
-  // Takeoff coaching: the one hint a new pilot actually needs.
+  // Takeoff coaching: the hints a new pilot actually needs, in order.
   if (flight.onGround && !flight.crashed && flight.speed > 34) {
     label(ctx, '↑  ROTATE', VIEW.width / 2, VIEW.height - 120, 17, INK, 'center', 800);
+  } else if (flight.onGround && !flight.crashed && flight.speed < 12 && flight.throttle < 0.9 && flight.elapsed < 20) {
+    label(ctx, 'W — THROTTLE UP', VIEW.width / 2, VIEW.height - 120, 17, INK, 'center', 800);
   }
 }
 
@@ -195,7 +197,7 @@ function drawPlaying(ctx, view) {
   const mph = Math.round(flight.speed * 2.237);
   const headingDeg = ((flight.heading * 180 / Math.PI) % 360 + 360) % 360;
 
-  panel(ctx, 18, 14, 196, 118, 12);
+  panel(ctx, 18, 14, 196, 142, 12);
   label(ctx, 'ALT  AGL', 32, 38, 11);
   value(ctx, `${aglFt}`, 32, 70, 30);
   label(ctx, 'ft', 32 + ctx.measureText(`${aglFt}`).width + 22, 70, 12, DIM);
@@ -203,6 +205,10 @@ function drawPlaying(ctx, view) {
   label(ctx, 'SPD', 32, 112, 11);
   value(ctx, `${mph}`, 66, 114, 19);
   label(ctx, 'mph', 66 + ctx.measureText(`${mph}`).width + 16, 114, 11, DIM);
+  const vsFpm = Math.round(flight.verticalSpeed * 196.85 / 10) * 10;
+  label(ctx, 'V/S', 32, 138, 11);
+  value(ctx, `${vsFpm > 0 ? '+' : ''}${vsFpm}`, 66, 140, 15, vsFpm < -1200 ? BAD : INK);
+  label(ctx, 'ft/min', 66 + ctx.measureText(`${vsFpm > 0 ? '+' : ''}${vsFpm}`).width + 14, 140, 10.5, DIM);
 
   panel(ctx, VIEW.width - 232, 14, 214, 118, 12);
   label(ctx, mission ? mission.title.toUpperCase() : '', VIEW.width - 218, 38, 11.5, ACCENT);

@@ -28,7 +28,7 @@ export const MISSION_LIST = [
   {
     kind: MISSION_CARGO,
     title: 'Cargo Drop',
-    brief: 'One parcel for the meadow camp west of the river. Fly the marked field, judge the wind, and drop with Space — closest to the centre wins.',
+    brief: 'One parcel for the meadow camp west of the river. Fly the marked field and drop with Space — a steady breeze pushes the falling parcel east, so aim west of the centre. Closest to the centre wins.',
   },
   {
     kind: MISSION_LANDING,

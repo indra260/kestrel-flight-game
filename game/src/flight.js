@@ -27,6 +27,7 @@ export function createFlight(palette) {
     airborne: true, onGround: false, crashed: false,
     propPhase: 0, elapsed: 0,
     engineDead: false,
+    groundExitAt: null, // when the wheels last left the ground (bounce detection)
     lastContact: null, // { onRunway, sink, speed, surface, x, z } at the latest touchdown
     warnings: { stall: false, lowFuel: false, pullUp: false, engineOut: false },
   };
@@ -40,6 +41,7 @@ export function createFlight(palette) {
     state.fuel = AIRCRAFT.fuelCapacity; state.hull = AIRCRAFT.hull;
     state.airborne = !onGround; state.onGround = onGround; state.crashed = false;
     state.elapsed = 0; state.engineDead = false; state.lastContact = null;
+    state.groundExitAt = null;
   }
 
   function damage(amount) {
@@ -100,11 +102,15 @@ export function createFlight(palette) {
       state.speed = Math.max(0, state.speed - (state.throttle < 0.05 ? 5.5 : 0.7) * dt);
     }
 
-    // Velocity from attitude, plus the stall's extra sink.
+    // Velocity from attitude, plus the stall's extra sink. Just after the
+    // wheels leave rough ground the sink is halved: a rolling aircraft that
+    // a crest pops into the air settles back, it does not plummet — the
+    // full stall penalty is for a wing starved in flight, not for a bounce.
     const cosPitch = Math.cos(state.pitch);
     let vy = Math.sin(state.pitch) * state.speed;
     if (state.airborne && state.speed < AIRCRAFT.stallSpeed) {
-      vy -= (AIRCRAFT.stallSpeed - state.speed) * 0.34;
+      const justLeftGround = state.groundExitAt !== null && (state.elapsed - state.groundExitAt) < 1.5;
+      vy -= (AIRCRAFT.stallSpeed - state.speed) * (justLeftGround ? 0.17 : 0.34);
     }
     state.verticalSpeed = vy;
     const vx = Math.sin(state.heading) * cosPitch * state.speed;
@@ -140,9 +146,14 @@ export function createFlight(palette) {
       if (wasAirborne) {
         state.lastContact = { onRunway: strip, sink, speed: state.speed, surface, x: state.pos.x, z: state.pos.z };
         events |= F_GROUND_CONTACT;
-        const hardCrash = sink < -8.5
+        // A contact within a breath of leaving the ground is a bounce off
+        // rough country, not an arrival from flight: the valley's bumps can
+        // pop a rolling aircraft into the air, and meeting the slope again
+        // a second later must cost paint, not the whole aeroplane.
+        const bounced = state.groundExitAt !== null && (state.elapsed - state.groundExitAt) < 1.5;
+        const hardCrash = sink < (bounced ? -11 : -8.5)
           || surface === SURFACE.WATER_SEA || surface === SURFACE.WATER_RIVER
-          || (!strip && (sink < -4.2 || state.speed > 74))
+          || (!strip && !bounced && (sink < -4.2 || state.speed > 74))
           || (strip && Math.abs(angleDelta(state.heading, 0)) > 0.5 && state.speed > 40);
         if (hardCrash) {
           state.crashed = true;
@@ -150,8 +161,8 @@ export function createFlight(palette) {
           events |= F_CRASH;
           return events;
         }
-        if (sink < -4.2 || (!strip && state.speed > 46)) {
-          if (damage(strip ? 10 : 22)) { events |= F_CRASH; return events; }
+        if (sink < (bounced ? -5 : -4.2) || (!strip && state.speed > 46)) {
+          if (damage(bounced ? 10 : (strip ? 10 : 22))) { events |= F_CRASH; return events; }
         }
         state.airborne = false;
         state.onGround = true;
@@ -160,10 +171,21 @@ export function createFlight(palette) {
       // rotates it off again once there is speed for the wing.
       if (state.onGround) {
         state.pitch = Math.max(0, state.pitch) * 0.92;
+        // Off the tarmac the valley itself is the brake: grass drags hard,
+        // and a slope pulls the aircraft back the way it came, so a fast
+        // off-field rollout bleeds speed instead of sledding up a hillside
+        // and launching off its crest.
+        const aheadH = terrainHeight(
+          state.pos.x + Math.sin(state.heading) * 6, state.pos.z + Math.cos(state.heading) * 6);
+        const behindH = terrainHeight(
+          state.pos.x - Math.sin(state.heading) * 6, state.pos.z - Math.cos(state.heading) * 6);
+        state.speed = Math.max(0, state.speed - GRAVITY * ((aheadH - behindH) / 12) * 0.85 * dt);
+        if (!strip) state.speed = Math.max(0, state.speed - 3.2 * dt);
         if (state.speed > AIRCRAFT.stallSpeed + 9 && state.pitch > 0.06 && state.throttle > 0.3) {
           state.airborne = true;
           state.onGround = false;
           state.pos.y += 0.5;
+          state.groundExitAt = state.elapsed;
           events |= F_TAKEOFF;
         }
         if (state.speed < 0.4 && state.throttle < 0.05) state.speed = 0;
@@ -171,6 +193,7 @@ export function createFlight(palette) {
     } else if (state.onGround && wheelY > ground + 0.6) {
       state.onGround = false;
       state.airborne = true;
+      state.groundExitAt = state.elapsed;
     }
     if (prevY === state.pos.y && state.onGround) state.verticalSpeed = 0;
 
