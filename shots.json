@@ -1,1 +1,29 @@
-{"comment":"Deterministic screenshot scenes. Serve the game (node serve.ts), open each URL, wait for window.__shotReady === true, then capture the 1280x720 canvas. Every scene is the real game flown by an autopilot (game/src/shots.js); captures are unedited renders.","shots":[{"name":"1-cover","shows":"Takeoff roll on Runway 36 — chase view, lit HUD (ALT/SPD/HDG), first gates up the valley","url":"index.html?shot=takeoff"},{"name":"2-rings","shows":"Ring Run — through gate 1, lining up gate 2 over the river, combo on the HUD","url":"index.html?shot=rings"},{"name":"3-cargo","shows":"Cargo Drop — parcel away under parachute, target rings on the drop field below","url":"index.html?shot=cargo"},{"name":"4-landing","shows":"Landing Challenge — final approach, threshold markings and PAPI lights ahead","url":"index.html?shot=landing"}],"viewport":{"height":720,"width":1280}}
+{
+ "comment": "Deterministic screenshot scenes. Serve the game (node serve.ts), open each URL, wait for window.__shotReady === true, then capture the 1280x720 canvas. Every scene is the real game flown by an autopilot (game/src/shots.js); captures are unedited renders.",
+ "shots": [
+  {
+   "name": "1-cover",
+   "shows": "Climbing out over the valley \u2014 chase view, lit HUD (ALT/SPD/HDG), gate 1 ahead at eye level, waiting gates up the course",
+   "url": "index.html?shot=takeoff"
+  },
+  {
+   "name": "2-rings",
+   "shows": "Ring Run \u2014 through gate 1, lining up gate 2 over the river, combo on the HUD",
+   "url": "index.html?shot=rings"
+  },
+  {
+   "name": "3-cargo",
+   "shows": "Cargo Drop \u2014 parcel away under parachute, target rings on the drop field below",
+   "url": "index.html?shot=cargo"
+  },
+  {
+   "name": "4-landing",
+   "shows": "Landing Challenge \u2014 final approach, threshold markings and PAPI lights ahead",
+   "url": "index.html?shot=landing"
+  }
+ ],
+ "viewport": {
+  "height": 720,
+  "width": 1280
+ }
+}
